@@ -9,25 +9,18 @@ This essentially acts as a "Database Inspector" for AI agents, allowing them to 
 * iOS: `xcrun simctl` (available with Xcode)
 * Android: `adb` (available with Android Studio / Android SDK)
 
-## Installation
+## Quick Start (Recommended)
 
-```bash
-git clone <your-repo> react-native-sqlite-mcp
-cd react-native-sqlite-mcp
-npm install
-npm run build
-```
+The easiest way to use this MCP server is via `npx`. This doesn't require cloning the repository.
 
-## Adding to Claude Desktop
-
-Add the following to your `claude_desktop_config.json`:
+Add this to your `claude_desktop_config.json` (or Cursor/other MCP client settings):
 
 ```json
 {
   "mcpServers": {
     "rn-sqlite-bridge": {
-      "command": "node",
-      "args": ["/path/to/react-native-sqlite-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "react-native-sqlite-mcp"],
       "env": {
         "DB_NAME": "my_database.db",
         "ANDROID_BUNDLE_ID": "com.mycompany.myapp"
@@ -37,7 +30,34 @@ Add the following to your `claude_desktop_config.json`:
 }
 ```
 
-*Note: Replace `/path/to/react-native-sqlite-mcp` with the absolute path to where you cloned this repository. Replace `my_database.db` and `com.mycompany.myapp` with your app's actual values.*
+## Manual Installation (From Source)
+
+If you want to run it locally from source:
+
+```bash
+git clone <your-repo> react-native-sqlite-mcp
+cd react-native-sqlite-mcp
+npm install
+npm run build
+```
+
+Then configure your MCP client to point to the local file:
+
+```json
+{
+  "mcpServers": {
+    "rn-sqlite-bridge": {
+      "command": "node",
+      "args": ["/absolute/path/to/react-native-sqlite-mcp/dist/index.js"],
+      "env": {
+        "DB_NAME": "my_database.db",
+        "ANDROID_BUNDLE_ID": "com.mycompany.myapp"
+      }
+    }
+  }
+}
+```
+*Note: Replace `/absolute/path/to/react-native-sqlite-mcp` with the absolute path to where you cloned this repository.*
 
 ### Environment Variables
 - `DB_NAME`: The filename of your database (e.g., `my_app.db`) or a glob pattern (`*.db`).
