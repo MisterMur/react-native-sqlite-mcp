@@ -1,23 +1,70 @@
-# 🚀 Universal React Native SQLite MCP
+<div align="center">
 
-**TL;DR:** A Model Context Protocol (MCP) server that gives your favorite LLM (Claude, Cursor, Antigravity, etc.) X-ray vision into your local React Native SQLite databases. 
+# react-native-sqlite-mcp
 
-No more flying blind. No more manually exporting `.db` files from emulators to figure out why your app is broken. Just ask your AI: *"Hey, what does the `users` table look like on my Android emulator?"* and watch the magic happen. ✨
+Expose your React Native SQLite database to MCP-compatible tooling — with emulator support.
+
+<br />
+
+![npm version](https://img.shields.io/npm/v/react-native-sqlite-mcp?style=for-the-badge)
+![license](https://img.shields.io/github/license/MisterMur/react-native-sqlite-mcp?style=for-the-badge)
+![node](https://img.shields.io/badge/node-%3E%3D18-43853D?style=for-the-badge&logo=node.js)
+![react-native](https://img.shields.io/badge/React%20Native-supported-61DAFB?style=for-the-badge&logo=react)
+
+<br />
+
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript)
+![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite)
+![MCP](https://img.shields.io/badge/MCP-compatible-black?style=for-the-badge)
+
+</div>
 
 ---
 
-## 🤔 Why did I build this?
+## Overview
 
-Honestly? I was tired of jumping through hoops to inspect local databases while building React Native apps. Extracting SQLite files from an iOS Simulator or bypassing root permissions on an Android Emulator just to run a `SELECT *` was ruining my flow state. 
+SQLite MCP servers exist, but they all assume your database is a file sitting on your desktop or server. They open a path, read the file, done.
 
-I wanted my AI assistant to just *know* what my database looked like and query it in real-time. So I built this bridge. It's mobile development less painful.
+That doesn't work for mobile. On iOS Simulator, SQLite databases are buried deep inside sandboxed app containers. On Android Emulator, they're behind `run-as` permission boundaries that require `adb` to access. No existing SQLite MCP server handles either of these.
 
+I built this because I was tired of manually extracting `.db` files from emulators just to figure out why my app's local state was wrong.
 
-## 📦 Quick Start (The Magic Way)
+`react-native-sqlite-mcp` is a SQLite MCP server purpose-built for mobile emulators. It auto-discovers databases inside iOS Simulator and Android Emulator sandboxes, pulls them transparently, and exposes schema + query access to any MCP-compatible tool.
 
-You don't even need to clone this repo. The easiest way to get rolling is via `npx`.
+---
 
-Toss this bad boy into your `mcp.json` (or your Claude/Cursor/agent settings):
+## Why This Exists
+
+- Existing SQLite MCP servers can't reach databases inside iOS Simulator or Android Emulator sandboxes
+- Mobile MCP tooling focuses on UI automation, not the data layer
+- SQLite-backed state is critical in local-first React Native apps
+- There was no MCP bridge for inspecting emulator databases directly from your AI tooling
+
+This project fills that gap.
+
+---
+
+## How It Works
+
+```mermaid
+graph LR
+  subgraph Emulator
+    RN[React Native App] --> SQLite[(SQLite DB)]
+  end
+  SQLite -- "simctl / adb pull" --> MCP[MCP Server]
+  MCP -- "JSON-RPC stdio" --> AI[Claude / Cursor / Antigravity]
+```
+
+1. Auto-detects booted iOS Simulators (`xcrun simctl`) and Android Emulators (`adb`)
+2. Discovers SQLite databases inside sandboxed app containers
+3. Pulls database files transparently (iOS reads in-place, Android uses `run-as` + `adb pull`)
+4. Exposes schema and query access over the MCP stdio transport
+
+---
+
+## Quick Start
+
+Add this to your MCP config (`mcp.json`, `.cursor/mcp.json`, or `.gemini/settings.json`):
 
 ```json
 {
@@ -26,7 +73,7 @@ Toss this bad boy into your `mcp.json` (or your Claude/Cursor/agent settings):
       "command": "npx",
       "args": ["-y", "react-native-sqlite-mcp"],
       "env": {
-        "DB_NAME": "my_database.db",
+        "DB_NAME": "my_app.db",
         "ANDROID_BUNDLE_ID": "com.mycompany.myapp"
       }
     }
@@ -34,20 +81,87 @@ Toss this bad boy into your `mcp.json` (or your Claude/Cursor/agent settings):
 }
 ```
 
-Boom. You're connected. 🤝
+Restart your editor. Your AI can now query your emulator databases directly.
 
-## 🛠️ Manual Installation (For the brave)
+---
 
-Prefer to tinker with the source code yourself? I respect it. 
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `DB_NAME` | No | Database filename to auto-sync on startup (e.g. `my_app.db`). Supports glob patterns (`*.db`). If omitted, auto-selects the first discovered database. |
+| `ANDROID_BUNDLE_ID` | No | Android app package name (e.g. `com.mycompany.app`). If omitted, scans all third-party packages on the emulator. |
+| `READ_ONLY` | No | Set to `true` to restrict `query_db` to SELECT, PRAGMA, and EXPLAIN statements only. Default: `false`. |
+| `MCP_LOG_LEVEL` | No | Log verbosity: `debug`, `info`, `warn`, `error`. Default: `info`. Logs go to stderr only. |
+
+---
+
+## Tools
+
+### `list_databases`
+
+Scans for all SQLite databases on booted emulators/simulators.
+
+| Argument | Type | Description |
+|---|---|---|
+| `platform` | string | Optional. `ios` or `android`. If omitted, scans both. |
+| `bundleId` | string | Optional. Android-only app package name to narrow the search. |
+
+### `sync_database`
+
+Pulls a fresh copy of the database from the emulator so all subsequent queries use the latest data.
+
+| Argument | Type | Description |
+|---|---|---|
+| `dbName` | string | Optional. Database filename or glob pattern. Auto-selects if omitted. |
+| `bundleId` | string | Optional. Android-only app package name. |
+| `platform` | string | Optional. `ios` or `android`. |
+
+### `inspect_schema`
+
+Returns all tables, columns, and `CREATE TABLE` statements for the synced database.
+
+| Argument | Type | Description |
+|---|---|---|
+| `dbName` | string | Optional. Target a specific database. |
+| `platform` | string | Optional. `ios` or `android`. |
+
+### `read_table_contents`
+
+Returns rows from a table (`SELECT * FROM table LIMIT n`).
+
+| Argument | Type | Description |
+|---|---|---|
+| `tableName` | string | **Required.** The table to read. |
+| `limit` | number | Optional. Max rows to return. Default: `100`. |
+| `dbName` | string | Optional. Target a specific database. |
+| `platform` | string | Optional. `ios` or `android`. |
+
+### `query_db`
+
+Executes a raw SQL query and returns the result set.
+
+| Argument | Type | Description |
+|---|---|---|
+| `sql` | string | **Required.** The SQL statement to execute. |
+| `params` | array | Optional. Bind parameters for `?` placeholders. |
+| `dbName` | string | Optional. Target a specific database. |
+| `platform` | string | Optional. `ios` or `android`. |
+
+> When `READ_ONLY=true`, only `SELECT`, `PRAGMA`, and `EXPLAIN` statements are allowed.
+
+---
+
+## Manual Installation
 
 ```bash
-git clone https://github.com/your-username/react-native-sqlite-mcp.git
+git clone https://github.com/MisterMur/react-native-sqlite-mcp.git
 cd react-native-sqlite-mcp
 npm install
 npm run build
 ```
 
-Then point your MCP client to your local build:
+Point your MCP config at the local build:
 
 ```json
 {
@@ -56,49 +170,32 @@ Then point your MCP client to your local build:
       "command": "node",
       "args": ["/absolute/path/to/react-native-sqlite-mcp/dist/index.js"],
       "env": {
-        "DB_NAME": "my_database.db",
-        "ANDROID_BUNDLE_ID": "com.mycompany.myapp"
+        "DB_NAME": "my_app.db"
       }
     }
   }
 }
 ```
 
-## 🎛️ Environment Variables (The Knobs)
+---
 
-- `DB_NAME`: The filename of your database (e.g., `my_app.db`). You can also use a glob pattern (`*.db`) if you're feeling adventurous.
-- `ANDROID_BUNDLE_ID`: *(Android Only)* The application ID/package name of your app (e.g., `com.mycompany.app`). 
-  - **Pro-Tip:** If you leave this out, the MCP will go rogue and scan *all* third-party apps on your emulator for SQLite databases. Use with caution/glee.
+## Limitations
 
-## 🦸‍♂️ Features (What this bad boy can do)
+- Development environments only — not designed for production
+- iOS requires a booted Simulator with `xcrun simctl`
+- Android requires a booted Emulator with `adb` and a debuggable app (debug build)
+- Queries operate on a pulled snapshot, not a live connection
 
-This MCP arms your AI with four super-powered tools:
+---
 
-- 🕵️‍♂️ **`list_databases`**: Scours the device and returns a list of all available SQLite databases. Toss in `platform` ('ios' or 'android') to narrow the search.
-- 🔄 **`sync_database`**: Yanks a copy of a database from your active device into the MCP's working directory so the AI can inspect it to its heart's content. Leave the arguments blank, and it'll just grab the first default database it finds.
-- 🗺️ **`inspect_schema`**: The holy grail. Returns the `CREATE TABLE` and column info for your synced database. It literally gives the AI the map to your data.
-- 📖 **`read_table_contents`**: Dumps all rows from a specific table (capped at 100 rows so we don't blow up the context window). 
-- 🤖 **`query_db`**: Lets the AI fire raw SQL queries right at the database and get the results back. 
+## Contributing
 
-## ⚙️ How it Actually Works (Under the hood)
+Issues and pull requests are welcome.
 
-1. **Auto-Detect Platform**: It scans **both** iOS and Android environments simultaneously. It hunts down booted iOS Simulators using `simctl` and active Android Emulators using `adb`. 
-2. **Auto-Locate Database**: 
-  - **iOS:** We dive straight into the simulator's app sandbox. No root needed.
-  - **Android:** We do a sneaky `adb exec-out run-as com.pkg.name cat ...` to copy the database file, along with its `-wal` and `-shm` sidekicks, completely bypassing the strict root permission boundaries on debug profiles.
-3. **Platform Switching**: The server keeps one active database connection open. Want to switch from iOS to Android? The AI just calls `sync_database` for the other platform. Simple.
-4. **Execution**: It wraps all this up nicely so the LLM can learn your schema and query live data without bothering you.
+If you're working in the local-first React Native space and hit edge cases, open an issue. This tool exists because that gap was real.
 
-## 🤝 Contributing (Yes, please!)
+---
 
-Got an idea to make this objectively cooler? Found a bug where it accidentally queried your smart fridge? 
+## License
 
-I am **all in** on community contributions. Whether you're fixing a typo, optimizing the ADB scripts, or adding support for Windows Phone (please don't), I want your PRs.
-
-Check out the [CONTRIBUTING.md](./CONTRIBUTING.md) guide to see how we party.
-
-## 📜 License
-
-This project is licensed under the **MIT License**.
-
-See the [LICENSE](./LICENSE) file for the legal jargon.
+MIT

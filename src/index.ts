@@ -9,6 +9,10 @@ import {
 import { listDatabases, syncDatabase } from "./locator.js";
 import { inspectSchema, queryDb, closeAllConnections } from "./db.js";
 import { logger } from "./logger.js";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json");
 
 // ---------------------------------------------------------------------------
 // Process-level guards — prevent silent crashes that cause EOF errors
@@ -29,6 +33,12 @@ process.on("unhandledRejection", (reason) => {
 });
 
 // ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+const READ_ONLY = process.env.READ_ONLY === 'true' || process.env.READ_ONLY === '1';
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -47,7 +57,7 @@ let activeDatabases: SyncedDB[] = [];
 const server = new Server(
   {
     name: "react-native-sqlite-bridge",
-    version: "1.0.0",
+    version,
   },
   {
     capabilities: {
@@ -324,6 +334,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       if (!sql) {
         throw new Error("Missing required argument: sql");
+      }
+
+      if (READ_ONLY) {
+        const normalized = sql.trim().toUpperCase();
+        if (!normalized.startsWith("SELECT") && !normalized.startsWith("PRAGMA") && !normalized.startsWith("EXPLAIN")) {
+          throw new Error("READ_ONLY mode is enabled. Only SELECT, PRAGMA, and EXPLAIN statements are allowed.");
+        }
       }
 
       const results = await queryDb(activeDb.localPath, sql, params);
