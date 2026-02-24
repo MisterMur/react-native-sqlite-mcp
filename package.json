@@ -23,11 +23,11 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.0",
-    "sqlite3": "^5.1.7"
+    "sql.js": "^1.14.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
-    "@types/sqlite3": "^3.1.11",
+    "@types/sql.js": "^1.4.9",
     "typescript": "^5.7.3"
   }
 }
